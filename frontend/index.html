@@ -317,6 +317,22 @@ footer {
   text-align: center; font-size: 12px; color: var(--text-quaternary);
 }
 
+/* Tab 导航（多功能入口，工作台感）*/
+.tabs { display: flex; gap: 4px; }
+.tab {
+  border: 1px solid transparent; border-radius: 8px; padding: 7px 14px;
+  font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit;
+  background: transparent; color: var(--text-tertiary);
+  transition: all 0.2s;
+}
+.tab:hover { color: var(--text-primary); background: rgba(255,255,255,0.04); }
+.tab.active {
+  color: var(--text-primary); background: rgba(124,111,240,0.12);
+  border-color: rgba(124,111,240,0.3);
+}
+.view { display: none; }
+.view.active { display: block; }
+
 /* 加载动画（紫光）*/
 .spinner {
   width: 16px; height: 16px; border: 2px solid rgba(124,111,240,0.2);
@@ -341,11 +357,17 @@ footer {
       <div class="brand-logo">A</div>
       <span>AdPrompt Studio</span>
     </div>
-    <span class="nav-badge">出海电商广告素材生成器</span>
+    <div class="tabs">
+      <button class="tab active" onclick="switchView('generate')">生成素材包</button>
+      <button class="tab" onclick="switchView('optimize')">Prompt 优化</button>
+      <button class="tab" onclick="switchView('library')">素材库</button>
+    </div>
   </div>
 </header>
 
 <div class="container">
+  <!-- ============ 视图 1：生成素材包 ============ -->
+  <div class="view active" id="view-generate">
   <!-- Hero -->
   <div class="hero">
     <h1>商品信息 → <span class="grad">完整广告素材包</span></h1>
@@ -450,7 +472,70 @@ footer {
       </button>
       <span class="fb-note" id="fb-note"></span>
     </div>
-  </div>
+  </div><!-- /results -->
+  </div><!-- /view-generate -->
+
+  <!-- ============ 视图 2：Prompt 优化 ============ -->
+  <div class="view" id="view-optimize">
+    <div class="hero">
+      <h1>贴一个差的 prompt → <span class="grad">改进版 + 解释</span></h1>
+      <p>把效果不佳的 prompt 贴进来，AI 会检索知识库中的最佳实践范文，输出改进版并解释改了什么、为什么改。</p>
+    </div>
+    <div class="input-card">
+      <div class="input-grid">
+        <div class="field full">
+          <label>你的 Prompt *</label>
+          <textarea id="opt-prompt" placeholder="粘贴一个你觉得效果不好的视频生成 prompt，如：一个产品展示视频，产品在转盘上转圈"></textarea>
+        </div>
+        <div class="field">
+          <label>目标模型</label>
+          <select id="opt-model">
+            <option value="seedance">Seedance 2</option>
+            <option value="jimeng">即梦</option>
+            <option value="kling">可灵</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>商品/场景描述（可选，帮助检索更准）</label>
+          <input id="opt-context" placeholder="如：防水运动相机">
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="btn-optimize" onclick="optimize()">优化 Prompt</button>
+        <span class="status" id="opt-status"></span>
+      </div>
+    </div>
+    <div class="results" id="opt-results">
+      <div class="grid-2">
+        <div class="card">
+          <h3>原始 Prompt</h3>
+          <div class="body" id="opt-original" style="opacity:0.7"></div>
+        </div>
+        <div class="card">
+          <h3>优化后的 Prompt</h3>
+          <div class="body mono" id="opt-improved" style="font-size:12px"></div>
+          <button class="copy-btn" onclick="copyOptimized()">复制改进版</button>
+        </div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h3>改了什么 · 为什么</h3>
+        <div id="opt-changes"></div>
+        <div class="note" id="opt-refs"></div>
+      </div>
+    </div>
+  </div><!-- /view-optimize -->
+
+  <!-- ============ 视图 3：素材库 ============ -->
+  <div class="view" id="view-library">
+    <div class="hero">
+      <h1>你的 <span class="grad">素材库</span></h1>
+      <p>历史生成的素材包都在这里，可回看、可复用。生成越多，素材库越有积累价值。</p>
+    </div>
+    <div class="card">
+      <div id="lib-list"></div>
+      <div class="note" id="lib-empty" style="display:none;text-align:center;padding:32px;color:var(--text-quaternary)">暂无素材，先去「生成素材包」创建一个吧</div>
+    </div>
+  </div><!-- /view-library -->
 </div>
 
 <footer>AdPrompt Studio · 作品集项目 · 数据闭环：埋点 → SQL 漏斗/留存 → A/B 实验<br><span style="color:#8f8fa8;font-size:11px">v2.0-深空紫-20260820</span></footer>
@@ -460,6 +545,116 @@ footer {
 
 <script>
 let currentPayload = '';
+
+// ===== 视图切换（生成 / 优化 / 素材库）=====
+function switchView(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  const tabMap = { generate: 0, optimize: 1, library: 2 };
+  document.querySelectorAll('.tab')[tabMap[name]].classList.add('active');
+  if (name === 'library') loadLibrary();
+  track('view_switch_' + name, '');
+}
+
+// ===== Prompt 优化模式 =====
+async function optimize() {
+  const prompt = document.getElementById('opt-prompt').value.trim();
+  if (!prompt) { setOptStatus('请粘贴要优化的 prompt', true); return; }
+  const btn = document.getElementById('btn-optimize');
+  btn.disabled = true;
+  setOptStatus('<span class="spinner"></span>正在优化（约 30-60 秒）...');
+  track('prompt_optimize_click', document.getElementById('opt-model').value);
+  try {
+    const resp = await fetch('/api/optimize', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt,
+        model: document.getElementById('opt-model').value,
+        context: document.getElementById('opt-context').value
+      })
+    });
+    const d = await resp.json();
+    if (!d.ok) { setOptStatus('优化失败：' + (d.error || ''), true); btn.disabled = false; return; }
+    renderOptimize(d, prompt);
+    setOptStatus('✓ 优化完成，耗时 ' + d.elapsed_s + 's');
+    btn.disabled = false;
+  } catch (e) { setOptStatus('网络错误：' + e.message, true); btn.disabled = false; }
+}
+function setOptStatus(msg, isError) {
+  const el = document.getElementById('opt-status');
+  el.innerHTML = msg;
+  el.className = 'status' + (isError ? ' error' : '');
+}
+function renderOptimize(d, original) {
+  document.getElementById('opt-original').textContent = original;
+  document.getElementById('opt-improved').textContent = d.optimized_prompt;
+  const changes = d.changes || [];
+  document.getElementById('opt-changes').innerHTML = changes.map((c, i) =>
+    '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05)">' +
+    '<div style="font-size:13px;color:var(--text-primary)"><b>' + (i + 1) + '. 改了什么：</b>' + esc(c.what) + '</div>' +
+    '<div style="font-size:12px;color:var(--text-tertiary);margin-top:4px">为什么：' + esc(c.why) + '</div></div>'
+  ).join('') || '<div style="color:var(--text-quaternary)">无改动说明</div>';
+  document.getElementById('opt-refs').textContent = '参考范文来源：' + (d.references || []).join(', ');
+  document.getElementById('opt-results').classList.add('show');
+  document.getElementById('opt-results').scrollIntoView({ behavior: 'smooth' });
+  track('prompt_optimize_success', document.getElementById('opt-model').value);
+}
+function copyOptimized() {
+  const text = document.getElementById('opt-improved').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    track('prompt_copy', 'optimize');
+    showToast('改进版已复制 ✓');
+  }).catch(() => showToast('复制失败，请手动选择复制', true));
+}
+
+// ===== 素材库 =====
+async function loadLibrary() {
+  try {
+    const resp = await fetch('/api/library');
+    const d = await resp.json();
+    const list = document.getElementById('lib-list');
+    const empty = document.getElementById('lib-empty');
+    if (!d.ok || d.count === 0) {
+      list.innerHTML = '';
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+    list.innerHTML = d.items.map(item =>
+      '<div style="display:flex;align-items:center;gap:14px;padding:14px 6px;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer" ' +
+      'onclick="openLibraryItem(' + item.id + ')">' +
+      '<div style="flex:1"><div style="font-size:14px;color:var(--text-primary);font-weight:500">' + esc(item.product) + '</div>' +
+      '<div style="font-size:12px;color:var(--text-quaternary);margin-top:2px">' + esc(item.category || '') + ' · ' + esc(item.created_at) + '</div></div>' +
+      (item.quality_overall != null ?
+        '<div style="font-size:13px;color:' + (item.quality_overall >= 3.5 ? 'var(--success)' : 'var(--danger)') +
+        ';font-family:JetBrains Mono,monospace">质检 ' + item.quality_overall + '</div>' : '') +
+      '<div style="font-size:12px;color:var(--accent)">查看 →</div></div>'
+    ).join('');
+  } catch (e) { /* 静默 */ }
+}
+async function openLibraryItem(id) {
+  try {
+    const resp = await fetch('/api/library/' + id);
+    const d = await resp.json();
+    if (!d.ok) { showToast('加载失败', true); return; }
+    const it = d.item;
+    currentPayload = it.product;
+    // 复用生成视图的渲染，填充素材包内容
+    render({
+      product: { name: it.product, category: it.category },
+      selling_points: it.selling_points || [],
+      copy: it.copy || {},
+      visual: it.visual || {},
+      storyboard: it.storyboard || { shots: [] },
+      templates: it.templates || {},
+      quality: it.quality || { overall: 0, pass: false, style_score: 0, usability_score: 0 },
+      elapsed_s: 0
+    });
+    switchView('generate');
+    track('library_open', it.product);
+  } catch (e) { showToast('加载失败', true); }
+}
 
 async function generate() {
   const name = document.getElementById('in-name').value.trim();

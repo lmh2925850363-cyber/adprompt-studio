@@ -36,7 +36,7 @@ sys.path.insert(0, str(REPO_DIR / "src"))
 
 from workflow import (  # noqa: E402
     rag_retrieve, analyze_selling_points, generate_copy,
-    generate_visual_plan, generate_storyboard, log_event,
+    generate_visual_plan, generate_storyboard, log_event, call_llm,
 )
 from src.prompt_templates import render_all_templates  # noqa: E402
 from src.quality_judge import judge_storyboard  # noqa: E402
@@ -63,6 +63,13 @@ class EventRequest(BaseModel):
     event: str
     payload: str = ""
     is_simulated: int = 0  # 0=真实用户事件（前端），1=模拟数据（D7 脚本）
+
+
+class OptimizeRequest(BaseModel):
+    """Prompt 优化模式（P1）：贴差 prompt → RAG 检索范文 → 改进版 + 解释。"""
+    prompt: str
+    model: str = "seedance"  # 目标模型：seedance | jimeng | kling
+    context: str = ""        # 可选：商品/场景描述，帮助检索更准
 
 
 def _log_db_event(event: str, payload: str = "", is_simulated: int = 0) -> None:
@@ -179,6 +186,130 @@ def generate(req: GenerateRequest):
     except Exception as e:  # noqa: BLE001
         _log_db_event("prompt_generate_fail", f"{product['name']}: {e!r}")
         return {"ok": False, "error": repr(e)}
+
+
+@app.post("/api/optimize")
+def optimize(req: OptimizeRequest):
+    """
+    Prompt 优化模式（P1，第二个功能入口）：
+    用户贴一个"感觉不好用"的 prompt → RAG 检索知识库最佳实践范文 →
+    LLM 生成改进版 + 解释改了哪里、为什么。
+
+    产品价值：解决卖家"prompt 写不好但不知道怎么改"的问题——
+    不是从零生成，而是把差的改好，并让用户学会（解释改了什么）。
+    """
+    t0 = time.time()
+    if not req.prompt.strip():
+        return {"ok": False, "error": "请粘贴要优化的 prompt"}
+
+    _log_db_event("prompt_optimize_click", req.model)
+    try:
+        # ① RAG 检索最佳实践范文（用差 prompt + 可选上下文作为查询）
+        query = f"{req.context} {req.prompt}"[:500] if req.context else req.prompt[:500]
+        refs = rag_retrieve(query, top_k=3)
+        ref_text = "\n\n".join(f"[范文{i+1}]: {r['text'][:500]}" for i, r in enumerate(refs))
+
+        # ② LLM 生成改进版 + 解释
+        sys_prompt = (
+            "你是视频生成 prompt 优化专家。用户会粘贴一个效果不佳的 prompt，"
+            "参考知识库里的最佳实践范文，输出优化后的版本并解释改了哪里。\n"
+            "输出 JSON："
+            '{"optimized_prompt": "改进后的完整 prompt", '
+            '"changes": [{"what": "改了什么", "why": "为什么这么改"}], '
+            '"summary": "一句话总结"}'
+        )
+        user_prompt = (
+            f"目标模型：{req.model}\n"
+            f"用户的原 prompt：\n{req.prompt}\n\n"
+            f"参考最佳实践范文：\n{ref_text}\n\n"
+            "请优化并解释，输出 JSON："
+        )
+        raw = call_llm(sys_prompt, user_prompt, max_tokens=2500)
+        text = raw.strip()
+        if text.startswith("```"):
+            text = text.strip("`")
+            if text.startswith("json"):
+                text = text[4:]
+        result = json.loads(text.strip())
+
+        # ③ 落库（素材库可回看优化记录）+ 埋点
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute("""CREATE TABLE IF NOT EXISTS optimizations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            original_prompt TEXT, model TEXT, context TEXT,
+            optimized_prompt TEXT, changes TEXT, summary TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        )""")
+        conn.execute(
+            "INSERT INTO optimizations(original_prompt, model, context, optimized_prompt, changes, summary) VALUES(?,?,?,?,?,?)",
+            (req.prompt, req.model, req.context,
+             result.get("optimized_prompt", ""),
+             json.dumps(result.get("changes", []), ensure_ascii=False),
+             result.get("summary", "")),
+        )
+        conn.commit()
+        conn.close()
+        _log_db_event("prompt_optimize_success", req.model)
+
+        return {
+            "ok": True,
+            "elapsed_s": round(time.time() - t0, 1),
+            "optimized_prompt": result.get("optimized_prompt", ""),
+            "changes": result.get("changes", []),
+            "summary": result.get("summary", ""),
+            "references": [r["source_id"] for r in refs],
+        }
+    except Exception as e:  # noqa: BLE001
+        _log_db_event("prompt_optimize_fail", f"{req.model}: {e!r}")
+        return {"ok": False, "error": repr(e)}
+
+
+@app.get("/api/library")
+def library():
+    """素材库：历史生成的素材包列表（第二个功能入口，工作台感）。"""
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute(
+        "SELECT id, product_name, category, created_at, quality FROM generations ORDER BY id DESC LIMIT 50"
+    ).fetchall()
+    conn.close()
+    items = []
+    for r in rows:
+        quality = {}
+        try:
+            quality = json.loads(r[4] or "{}")
+        except json.JSONDecodeError:
+            pass
+        items.append({
+            "id": r[0], "product": r[1], "category": r[2],
+            "created_at": r[3], "quality_overall": quality.get("overall"),
+        })
+    return {"ok": True, "count": len(items), "items": items}
+
+
+@app.get("/api/library/{item_id}")
+def library_detail(item_id: int):
+    """素材库详情：单个素材包完整内容（含三模板 + 分镜）。"""
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute(
+        "SELECT id, product_name, category, selling_points, tiktok_copy, visual_plan, storyboard, templates, quality, created_at "
+        "FROM generations WHERE id=?", (item_id,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        return {"ok": False, "error": "素材不存在"}
+    return {
+        "ok": True,
+        "item": {
+            "id": row[0], "product": row[1], "category": row[2],
+            "selling_points": json.loads(row[3] or "[]"),
+            "copy": json.loads(row[4] or "{}"),
+            "visual": json.loads(row[5] or "{}"),
+            "storyboard": json.loads(row[6] or "{}"),
+            "templates": json.loads(row[7] or "{}"),
+            "quality": json.loads(row[8] or "{}"),
+            "created_at": row[9],
+        },
+    }
 
 
 # 前端静态文件
