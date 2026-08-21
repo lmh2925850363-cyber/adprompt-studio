@@ -72,6 +72,13 @@ class OptimizeRequest(BaseModel):
     context: str = ""        # 可选：商品/场景描述，帮助检索更准
 
 
+class SourcingRequest(BaseModel):
+    """V2 选品分析：输入品类方向 → 规则引擎评估 → 推荐 SKU 方向。"""
+    category: str = ""        # 品类方向（可选，空则给热门品类）
+    budget: float = 5000.0    # 单 SKU 预算（¥）
+    platform: str = "tiktok"  # tiktok | amazon
+
+
 def _log_db_event(event: str, payload: str = "", is_simulated: int = 0) -> None:
     """写事件到 SQLite（供 D7 模拟用户 + D8 SQL 分析）。"""
     conn = sqlite3.connect(DB_PATH)
@@ -98,6 +105,51 @@ def dashboard():
     if not dash.exists():
         return {"error": "看板未生成，先运行 python scripts/build_dashboard.py"}
     return FileResponse(dash)
+
+
+class CollectRequest(BaseModel):
+    """F 反馈飞轮：把用户 👍 的素材收藏进知识库（数据飞轮，越用越强）。"""
+    generation_id: int
+    product: str = ""
+    category: str = ""
+
+
+@app.post("/api/collect")
+def collect(req: CollectRequest):
+    """
+    F 数据飞轮：把质检通过 + 用户认可（👍）的素材收藏到 knowledge 收藏库。
+    未来重建知识库时，收藏的素材作为「用户验证过的好 prompt」参与检索——
+    让系统越用越懂"用户觉得什么好"。
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        # 读该 generation 的模板 prompt（收藏主素材 = 三模型 prompt）
+        row = conn.execute(
+            "SELECT product_name, category, templates FROM generations WHERE id=?", (req.generation_id,)
+        ).fetchone()
+        if not row:
+            conn.close()
+            return {"ok": False, "error": "素材不存在"}
+        templates = json.loads(row[2] or "{}")
+
+        conn.execute("""CREATE TABLE IF NOT EXISTS collected (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            generation_id INTEGER, product TEXT, category TEXT,
+            template_text TEXT, collected_at TEXT DEFAULT (datetime('now')),
+            is_simulated INTEGER DEFAULT 0
+        )""")
+        # 收藏全部三模型 prompt（作为知识库回灌候选）
+        for model, info in templates.items():
+            conn.execute(
+                "INSERT INTO collected(generation_id, product, category, template_text) VALUES(?,?,?,?)",
+                (req.generation_id, row[0], row[1], info.get("prompt", "")),
+            )
+        conn.commit()
+        conn.close()
+        _log_db_event("collect_to_kb", f"generation={req.generation_id}")
+        return {"ok": True, "collected_models": list(templates.keys())}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": repr(e)}
 
 
 @app.get("/api/health")
@@ -310,6 +362,140 @@ def library_detail(item_id: int):
             "created_at": row[9],
         },
     }
+
+
+@app.post("/api/sourcing")
+def sourcing(req: SourcingRequest):
+    """
+    V2 选品分析（规则引擎，不调 LLM 省成本）：
+    输入品类方向/预算/平台 → 评估品类热度、利润空间、合规风险 → 推荐 SKU 方向。
+
+    设计说明（可拷打）：
+    - 规则引擎 vs LLM：选品评估用「可解释的规则」而非黑盒 LLM——面试可讲
+      "确定性判断用规则（成本低、可解释），创意生成用 LLM（需要创造力）"
+    - 品类热度：基于公开电商常识的评级模型（不是真实流量数据，诚实标注）
+    - 利润估算：售价/采购成本/平台佣金/物流 → 毛利（参数模型）
+    - 合规检查：平台规则常识清单（TikTok/Amazon）
+    """
+    # 品类知识库（公开常识评级，2026-08 校准；不是实时数据，诚实标注）
+    CATEGORIES = {
+        "3C数码": {"heat": 8, "margin": "medium", "note": "高热度高竞争，需差异化；手机配件/耳机/智能穿戴较稳", "platforms": ["tiktok", "amazon"]},
+        "美妆个护": {"heat": 9, "margin": "high", "note": "美妆是 TikTok 转化王品类，但需成分合规（FDA/欧盟）", "platforms": ["tiktok"]},
+        "运动户外": {"heat": 7, "margin": "medium", "note": "露营/健身器材热度上升，季节性明显", "platforms": ["tiktok", "amazon"]},
+        "宠物用品": {"heat": 8, "margin": "high", "note": "宠物经济持续增长，智能喂食器/玩具需求稳", "platforms": ["tiktok", "amazon"]},
+        "厨房家电": {"heat": 6, "margin": "low", "note": "客单价高但物流重、佣金高，适合 Amazon 不适合 TikTok", "platforms": ["amazon"]},
+        "运动营养": {"heat": 7, "margin": "high", "note": "蛋白粉/补剂复购强，但各国食品合规严格", "platforms": ["tiktok"]},
+        "家居日用": {"heat": 6, "margin": "low", "note": "需求稳定竞争激烈，利润薄，适合走量", "platforms": ["amazon"]},
+    }
+    # 合规规则（平台常识清单，非实时政策）
+    COMPLIANCE = {
+        "tiktok": ["广告素材需标注「广告」", "夸大功效类文案易被拒（减肥/医疗）", "音乐版权需授权", "目标市场当地语言"],
+        "amazon": ["主图白底规范", "五点描述不得含促销词（free/sale）", "需类目审核（美妆/食品）", "专利侵权风险自查"],
+    }
+
+    # 候选品类：指定了就用指定，否则给热门
+    if req.category and req.category in CATEGORIES:
+        cand = [req.category]
+    elif req.category:
+        cand = [c for c in CATEGORIES if req.category in c]
+    else:
+        cand = ["美妆个护", "3C数码", "宠物用品", "运动户外", "运动营养"]
+    cand = [c for c in cand if c in CATEGORIES]
+    if not cand:
+        cand = ["3C数码"]
+
+    results = []
+    for cat in cand:
+        info = CATEGORIES[cat]
+        if req.platform not in info["platforms"]:
+            continue
+        # 利润估算（参数模型，可调）
+        if info["margin"] == "high":
+            est_profit_pct, risk = 0.35, "中"
+        elif info["margin"] == "medium":
+            est_profit_pct, risk = 0.25, "中低"
+        else:
+            est_profit_pct, risk = 0.15, "低"
+        est_profit = round(req.budget * est_profit_pct, 0)
+        results.append({
+            "category": cat,
+            "heat": info["heat"],
+            "heat_label": "🔥 高热度" if info["heat"] >= 8 else "🌟 中高热度",
+            "est_profit": est_profit,
+            "est_profit_pct": int(est_profit_pct * 100),
+            "note": info["note"],
+            "compliance": COMPLIANCE.get(req.platform, []),
+        })
+    results.sort(key=lambda r: (-r["heat"], -r["est_profit"]))
+
+    _log_db_event("sourcing_analyze", req.category or "热门")
+    return {
+        "ok": True,
+        "platform": req.platform,
+        "budget": req.budget,
+        "results": results,
+        "note": "规则引擎评估（公开常识评级，非实时流量数据，结论方向性）",
+    }
+
+
+@app.get("/api/export/{item_id}")
+def export_item(item_id: int):
+    """I 导出功能：素材包导出为 Markdown 文件（可直接保存分享）。"""
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute(
+        "SELECT id, product_name, category, selling_points, tiktok_copy, visual_plan, storyboard, templates, quality, created_at "
+        "FROM generations WHERE id=?", (item_id,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        return {"ok": False, "error": "素材不存在"}
+    selling = json.loads(row[3] or "[]")
+    copy = json.loads(row[4] or "{}")
+    visual = json.loads(row[5] or "{}")
+    storyboard = json.loads(row[6] or "{}")
+    templates = json.loads(row[7] or "{}")
+    quality = json.loads(row[8] or "{}")
+
+    md = [f"# {row[1]} 广告素材包", ""]
+    md.append(f"> 生成时间：{row[9]} ｜ 类目：{row[2]} ｜ 质检分：{quality.get('overall', '—')}")
+    md.append("")
+    md.append("## 卖点分析")
+    for i, p in enumerate(selling, 1):
+        md.append(f"{i}. {p}")
+    md.append("")
+    md.append("## 广告文案")
+    if isinstance(copy, dict):
+        if copy.get("hook"):
+            md.append(f"- 开头钩子：{copy['hook']}")
+        if copy.get("captions"):
+            md.append("- 场景文案：")
+            for c in copy["captions"]:
+                md.append(f"  - {c}")
+    md.append("")
+    md.append("## 视觉方案")
+    if visual.get("style"):
+        md.append(f"- 风格：{visual['style']}")
+    if visual.get("composition"):
+        md.append(f"- 构图：{visual['composition']}")
+    if visual.get("mood"):
+        md.append(f"- 情绪：{visual['mood']}")
+    md.append("")
+    md.append("## 分镜脚本")
+    for s in storyboard.get("shots", []):
+        md.append(f"- **镜头{s.get('shot_no')}**（{s.get('scene_type')}，{s.get('camera')}，{s.get('duration')}）：{s.get('description')}")
+        if s.get("copy"):
+            md.append(f"  - 文案：{s['copy']}")
+    md.append("")
+    md.append("## 三模型 Prompt")
+    for model, info in templates.items():
+        md.append(f"### {info.get('label', model)}")
+        md.append("```")
+        md.append(info.get("prompt", ""))
+        md.append("```")
+        md.append("")
+
+    _log_db_event("export_item", f"generation={item_id}")
+    return {"ok": True, "filename": f"{row[1]}_素材包.md", "markdown": "\n".join(md)}
 
 
 # 前端静态文件

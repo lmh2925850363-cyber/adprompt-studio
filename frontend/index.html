@@ -361,6 +361,7 @@ footer {
       <button class="tab active" onclick="switchView('generate')">生成素材包</button>
       <button class="tab" onclick="switchView('optimize')">Prompt 优化</button>
       <button class="tab" onclick="switchView('library')">素材库</button>
+      <button class="tab" onclick="switchView('sourcing')">选品分析</button>
     </div>
   </div>
 </header>
@@ -450,6 +451,8 @@ footer {
 
     <!-- 分镜 -->
     <div class="section-title"><span class="step">02</span>分镜脚本（<span id="shot-count">0</span> 镜头）</div>
+    <!-- D 结果可视化：故事板预览（纯前端 SVG，不调 LLM） -->
+    <div id="storyboard-preview" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:16px"></div>
     <div class="card" style="padding:6px 16px">
       <table>
         <thead><tr><th style="width:56px">#</th><th style="width:90px">景别</th><th style="width:90px">运镜</th><th>画面描述</th><th style="width:120px">文案</th><th style="width:60px">时长</th></tr></thead>
@@ -536,6 +539,43 @@ footer {
       <div class="note" id="lib-empty" style="display:none;text-align:center;padding:32px;color:var(--text-quaternary)">暂无素材，先去「生成素材包」创建一个吧</div>
     </div>
   </div><!-- /view-library -->
+
+  <!-- ============ 视图 4：选品分析（V2）============ -->
+  <div class="view" id="view-sourcing">
+    <div class="hero">
+      <h1>先选对品，<span class="grad">再做广告</span></h1>
+      <p>广告做得再好，选错品也白搭。输入品类方向与预算，评估品类热度、利润空间与合规风险，推荐值得做的 SKU 方向。</p>
+    </div>
+    <div class="input-card">
+      <div class="input-grid">
+        <div class="field">
+          <label>品类方向（可选，空则看热门）</label>
+          <select id="src-category">
+            <option value="">热门品类推荐</option>
+            <option>美妆个护</option><option>3C数码</option><option>宠物用品</option>
+            <option>运动户外</option><option>运动营养</option><option>厨房家电</option><option>家居日用</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>平台</label>
+          <select id="src-platform">
+            <option value="tiktok">TikTok Shop</option>
+            <option value="amazon">Amazon</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>单 SKU 预算（¥）</label>
+          <input id="src-budget" type="number" value="5000">
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" onclick="sourcing()">开始选品分析</button>
+        <span class="status" id="src-status"></span>
+      </div>
+    </div>
+    <div class="results" id="src-results"></div>
+    <div class="note" style="margin-top:12px">⚠️ 选品为规则引擎评估（公开常识评级，非实时流量数据），结论方向性——用于展示"选品→制作→投放"全流程闭环的产品视野。</div>
+  </div><!-- /view-sourcing -->
 </div>
 
 <footer>AdPrompt Studio · 作品集项目 · 数据闭环：埋点 → SQL 漏斗/留存 → A/B 实验<br><span style="color:#8f8fa8;font-size:11px">v2.0-深空紫-20260820</span></footer>
@@ -551,7 +591,7 @@ function switchView(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + name).classList.add('active');
-  const tabMap = { generate: 0, optimize: 1, library: 2 };
+  const tabMap = { generate: 0, optimize: 1, library: 2, sourcing: 3 };
   document.querySelectorAll('.tab')[tabMap[name]].classList.add('active');
   if (name === 'library') loadLibrary();
   track('view_switch_' + name, '');
@@ -629,7 +669,10 @@ async function loadLibrary() {
       (item.quality_overall != null ?
         '<div style="font-size:13px;color:' + (item.quality_overall >= 3.5 ? 'var(--success)' : 'var(--danger)') +
         ';font-family:JetBrains Mono,monospace">质检 ' + item.quality_overall + '</div>' : '') +
-      '<div style="font-size:12px;color:var(--accent)">查看 →</div></div>'
+      '<div style="display:flex;gap:8px;align-items:center">' +
+      '<button class="copy-btn" style="margin:0" onclick="event.stopPropagation();exportItem(' + item.id + ',\'' + esc(item.product).replace(/'/g, "\\'") + '\')">导出</button>' +
+      '<button class="copy-btn" style="margin:0" onclick="event.stopPropagation();collectToKb(' + item.id + ',\'' + esc(item.product).replace(/'/g, "\\'") + '\')">收藏</button>' +
+      '<div style="font-size:12px;color:var(--accent)">查看 →</div></div></div>'
     ).join('');
   } catch (e) { /* 静默 */ }
 }
@@ -656,6 +699,74 @@ async function openLibraryItem(id) {
   } catch (e) { showToast('加载失败', true); }
 }
 
+// ===== V2 选品分析 =====
+async function sourcing() {
+  const btn = event.currentTarget;
+  btn.disabled = true;
+  const st = document.getElementById('src-status');
+  st.innerHTML = '<span class="spinner"></span>正在分析品类...';
+  track('sourcing_click', document.getElementById('src-category').value || '热门');
+  try {
+    const resp = await fetch('/api/sourcing', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        category: document.getElementById('src-category').value,
+        platform: document.getElementById('src-platform').value,
+        budget: parseFloat(document.getElementById('src-budget').value) || 5000
+      })
+    });
+    const d = await resp.json();
+    if (!d.ok) { st.innerHTML = '分析失败'; btn.disabled = false; return; }
+    const box = document.getElementById('src-results');
+    box.classList.add('show');
+    box.innerHTML = d.results.map(r =>
+      '<div class="card" style="margin-bottom:14px">' +
+      '<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">' +
+      '<span style="font-size:16px;font-weight:600;color:var(--text-primary)">' + esc(r.category) + '</span>' +
+      '<span class="chip">' + esc(r.heat_label) + '</span>' +
+      '<span class="chip">预估毛利 ' + r.est_profit_pct + '%（约 ¥' + r.est_profit + '）</span>' +
+      '</div>' +
+      '<div style="font-size:13px;color:var(--text-secondary);margin-bottom:10px">' + esc(r.note) + '</div>' +
+      '<div style="font-size:12px;color:var(--text-tertiary)"><b>平台合规要点：</b>' +
+      r.compliance.map(c => esc(c)).join('；') + '</div>' +
+      '</div>'
+    ).join('');
+    st.innerHTML = '✓ 分析完成（' + d.results.length + ' 个品类方向）';
+    btn.disabled = false;
+    track('sourcing_success', d.results.length + ' categories');
+  } catch (e) { st.innerHTML = '网络错误'; btn.disabled = false; }
+}
+
+// ===== I 导出素材包 =====
+async function exportItem(id, product) {
+  try {
+    const resp = await fetch('/api/export/' + id);
+    const d = await resp.json();
+    if (!d.ok) { showToast('导出失败', true); return; }
+    const blob = new Blob([d.markdown], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = (product || '素材') + '_素材包.md';
+    a.click(); URL.revokeObjectURL(url);
+    track('export_item', product || ('generation=' + id));
+    showToast('已导出 Markdown ✓');
+  } catch (e) { showToast('导出失败', true); }
+}
+
+// ===== F 反馈飞轮：收藏到知识库 =====
+async function collectToKb(id, product) {
+  try {
+    const resp = await fetch('/api/collect', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ generation_id: id, product: product })
+    });
+    const d = await resp.json();
+    if (!d.ok) { showToast('收藏失败', true); return; }
+    track('collect_to_kb', product);
+    showToast('已收藏到知识库（' + (d.collected_models || []).length + ' 个模型）✓');
+  } catch (e) { showToast('收藏失败', true); }
+}
+
 async function generate() {
   const name = document.getElementById('in-name').value.trim();
   const desc = document.getElementById('in-desc').value.trim();
@@ -665,7 +776,15 @@ async function generate() {
   }
   const btn = document.getElementById('btn-generate');
   btn.disabled = true;
-  setStatus('<span class="spinner"></span>正在生成素材包（约 30-60 秒）...');
+  // G 生成步骤展示：轮播步骤文案（真实反馈生成进度感）
+  const steps = ['正在检索最佳实践范文（RAG）...', '正在分析卖点...', '正在生成广告文案...',
+                 '正在设计视觉方案...', '正在编写分镜脚本...', '质检打分中...', '渲染三模型 Prompt...'];
+  let stepIdx = 0;
+  setStatus('<span class="spinner"></span>' + steps[0]);
+  const stepTimer = setInterval(() => {
+    stepIdx = (stepIdx + 1) % steps.length;
+    setStatus('<span class="spinner"></span>' + steps[stepIdx]);
+  }, 6000);
 
   // 埋点：页面内生成点击
   track('prompt_generate_click', name);
@@ -680,11 +799,13 @@ async function generate() {
       })
     });
     const data = await resp.json();
+    clearInterval(stepTimer);
     if (!data.ok) { setStatus('生成失败：' + (data.error || '未知错误'), true); btn.disabled = false; return; }
     render(data);
     setStatus('✓ 生成完成，耗时 ' + data.elapsed_s + 's');
     btn.disabled = false;
   } catch (e) {
+    clearInterval(stepTimer);
     setStatus('网络错误：' + e.message, true);
     btn.disabled = false;
   }
@@ -757,6 +878,23 @@ function render(d) {
     '<td>' + esc(s.description) + '</td>' +
     '<td>' + esc(s.copy) + '</td>' +
     '<td class="mono">' + esc(s.duration) + '</td></tr>').join('');
+
+  // D 结果可视化：故事板预览（每个镜头一张 SVG 卡，色块+场景标注）
+  const previewEl = document.getElementById('storyboard-preview');
+  if (previewEl) {
+    previewEl.innerHTML = shots.map(s => {
+      const hue = (s.shot_no * 47) % 360;
+      return '<div style="border:1px solid var(--border-glass);border-radius:10px;overflow:hidden;background:rgba(255,255,255,0.02)">' +
+        '<svg viewBox="0 0 150 90" style="width:100%;display:block">' +
+        '<rect width="150" height="90" fill="hsl(' + hue + ',45%,14%)"/>' +
+        '<rect x="10" y="10" width="130" height="55" rx="4" fill="hsl(' + hue + ',50%,22%)" stroke="rgba(255,255,255,0.15)"/>' +
+        '<text x="75" y="47" text-anchor="middle" font-size="13" fill="rgba(255,255,255,0.85)" font-family="JetBrains Mono,monospace">镜头 ' + s.shot_no + '</text>' +
+        '<text x="75" y="78" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.6)">' + esc(s.scene_type) + ' · ' + esc(s.camera) + ' · ' + esc(s.duration) + '</text>' +
+        '</svg>' +
+        '<div style="padding:6px 8px;font-size:10px;color:var(--text-tertiary);line-height:1.5;min-height:32px">' + esc((s.description || '').slice(0, 40)) + (s.description && s.description.length > 40 ? '…' : '') + '</div>' +
+        '</div>';
+    }).join('');
+  }
 
   // 三模板
   const tpl = d.templates;
