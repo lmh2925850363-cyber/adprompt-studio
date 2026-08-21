@@ -317,21 +317,33 @@ footer {
   text-align: center; font-size: 12px; color: var(--text-quaternary);
 }
 
-/* Tab 导航（多功能入口，工作台感）*/
-.tabs { display: flex; gap: 4px; }
-.tab {
-  border: 1px solid transparent; border-radius: 8px; padding: 7px 14px;
-  font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit;
-  background: transparent; color: var(--text-tertiary);
-  transition: all 0.2s;
+/* Tab 导航（多功能入口，强存在感）*/
+.tabs {
+  display: flex; gap: 6px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border-glass);
+  border-radius: 12px; padding: 5px;
 }
-.tab:hover { color: var(--text-primary); background: rgba(255,255,255,0.04); }
+.tab {
+  border: none; border-radius: 9px; padding: 9px 16px;
+  font-size: 14px; font-weight: 500; cursor: pointer; font-family: inherit;
+  background: transparent; color: var(--text-tertiary);
+  transition: all 0.2s; position: relative; white-space: nowrap;
+}
+.tab:hover { color: var(--text-primary); background: rgba(255,255,255,0.06); }
 .tab.active {
-  color: var(--text-primary); background: rgba(124,111,240,0.12);
-  border-color: rgba(124,111,240,0.3);
+  color: var(--text-primary); background: rgba(124,111,240,0.16);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgba(124,111,240,0.35);
+}
+.tab.active::after {
+  content: ""; position: absolute; left: 20%; right: 20%; bottom: -1px; height: 2px;
+  background: linear-gradient(90deg, var(--brand-violet), var(--brand-cyan));
+  border-radius: 2px;
 }
 .view { display: none; }
-.view.active { display: block; }
+.view.active { display: block; animation: fadeIn 0.25s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
 /* 加载动画（紫光）*/
 .spinner {
@@ -358,17 +370,18 @@ footer {
       <span>AdPrompt Studio</span>
     </div>
     <div class="tabs">
-      <button class="tab active" onclick="switchView('generate')">生成素材包</button>
-      <button class="tab" onclick="switchView('optimize')">Prompt 优化</button>
-      <button class="tab" onclick="switchView('library')">素材库</button>
-      <button class="tab" onclick="switchView('sourcing')">选品分析</button>
+      <button class="tab active" onclick="switchView('sourcing')" title="第 1 步：判断什么值得做">① 选品</button>
+      <button class="tab" onclick="switchView('generate')" title="第 2 步：生成广告素材">② 制作</button>
+      <button class="tab" onclick="switchView('optimize')" title="把差的 prompt 改好">③ 优化</button>
+      <button class="tab" onclick="switchView('adbuy')" title="第 3 步：怎么投">④ 投放</button>
+      <button class="tab" onclick="switchView('library')" title="历史素材与积累">⑤ 素材库</button>
     </div>
   </div>
 </header>
 
 <div class="container">
   <!-- ============ 视图 1：生成素材包 ============ -->
-  <div class="view active" id="view-generate">
+  <div class="view" id="view-generate">
   <!-- Hero -->
   <div class="hero">
     <h1>商品信息 → <span class="grad">完整广告素材包</span></h1>
@@ -541,7 +554,7 @@ footer {
   </div><!-- /view-library -->
 
   <!-- ============ 视图 4：选品分析（V2）============ -->
-  <div class="view" id="view-sourcing">
+  <div class="view active" id="view-sourcing">
     <div class="hero">
       <h1>先选对品，<span class="grad">再做广告</span></h1>
       <p>广告做得再好，选错品也白搭。输入品类方向与预算，评估品类热度、利润空间与合规风险，推荐值得做的 SKU 方向。</p>
@@ -576,6 +589,47 @@ footer {
     <div class="results" id="src-results"></div>
     <div class="note" style="margin-top:12px">⚠️ 选品为规则引擎评估（公开常识评级，非实时流量数据），结论方向性——用于展示"选品→制作→投放"全流程闭环的产品视野。</div>
   </div><!-- /view-sourcing -->
+
+  <!-- ============ 视图 5：投放规则（V3）============ -->
+  <div class="view" id="view-adbuy">
+    <div class="hero">
+      <h1>选好品、做好素材，<span class="grad">怎么投？</span></h1>
+      <p>输入品类/预算/投放目标，输出预算分配、出价参考、受众定向、素材规格与 A/B 测试计划——补全「选品→制作→投放」最后一环。</p>
+    </div>
+    <div class="input-card">
+      <div class="input-grid">
+        <div class="field">
+          <label>品类</label>
+          <input id="ab-category" placeholder="如：宠物用品">
+        </div>
+        <div class="field">
+          <label>平台</label>
+          <select id="ab-platform">
+            <option value="tiktok">TikTok Shop</option>
+            <option value="amazon">Amazon</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>预算（¥）</label>
+          <input id="ab-budget" type="number" value="5000">
+        </div>
+        <div class="field">
+          <label>投放目标</label>
+          <select id="ab-goal">
+            <option value="conversion">转化（出单）</option>
+            <option value="traffic">曝光（跑量）</option>
+            <option value="testing">测款（验证）</option>
+          </select>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" onclick="adbuy()">生成投放策略</button>
+        <span class="status" id="ab-status"></span>
+      </div>
+    </div>
+    <div class="results" id="ab-results"></div>
+    <div class="note" style="margin-top:12px">⚠️ 投放策略为规则引擎（公开常识，非实时竞价数据），方向性——用于展示全流程闭环的产品视野。</div>
+  </div><!-- /view-adbuy -->
 </div>
 
 <footer>AdPrompt Studio · 作品集项目 · 数据闭环：埋点 → SQL 漏斗/留存 → A/B 实验<br><span style="color:#8f8fa8;font-size:11px">v2.0-深空紫-20260820</span></footer>
@@ -591,7 +645,7 @@ function switchView(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + name).classList.add('active');
-  const tabMap = { generate: 0, optimize: 1, library: 2, sourcing: 3 };
+  const tabMap = { sourcing: 0, generate: 1, optimize: 2, adbuy: 3, library: 4 };
   document.querySelectorAll('.tab')[tabMap[name]].classList.add('active');
   if (name === 'library') loadLibrary();
   track('view_switch_' + name, '');
@@ -729,12 +783,69 @@ async function sourcing() {
       '<div style="font-size:13px;color:var(--text-secondary);margin-bottom:10px">' + esc(r.note) + '</div>' +
       '<div style="font-size:12px;color:var(--text-tertiary)"><b>平台合规要点：</b>' +
       r.compliance.map(c => esc(c)).join('；') + '</div>' +
-      '</div>'
+      '<div style="margin-top:12px;display:flex;gap:8px">' +
+      '<button class="copy-btn" style="margin:0" onclick="goAdbuy(\'' + esc(r.category).replace(/'/g, "\\'") + '\')">进入投放 →</button>' +
+      '<button class="copy-btn" style="margin:0" onclick="switchView(\'generate\')">去做素材 →</button>' +
+      '</div></div>'
     ).join('');
     st.innerHTML = '✓ 分析完成（' + d.results.length + ' 个品类方向）';
     btn.disabled = false;
     track('sourcing_success', d.results.length + ' categories');
   } catch (e) { st.innerHTML = '网络错误'; btn.disabled = false; }
+}
+
+// ===== V3 投放规则 =====
+async function adbuy() {
+  const btn = event.currentTarget;
+  btn.disabled = true;
+  const st = document.getElementById('ab-status');
+  st.innerHTML = '<span class="spinner"></span>正在生成投放策略...';
+  track('adbuy_click', document.getElementById('ab-platform').value);
+  try {
+    const resp = await fetch('/api/adbuy', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        category: document.getElementById('ab-category').value,
+        platform: document.getElementById('ab-platform').value,
+        budget: parseFloat(document.getElementById('ab-budget').value) || 5000,
+        goal: document.getElementById('ab-goal').value
+      })
+    });
+    const d = await resp.json();
+    if (!d.ok) { st.innerHTML = '生成失败'; btn.disabled = false; return; }
+    const p = d.plan;
+    const box = document.getElementById('ab-results');
+    box.classList.add('show');
+    box.innerHTML =
+      '<div class="card" style="margin-bottom:14px">' +
+      '<h3 style="margin-bottom:12px">投放策略 · ' + esc(p.category) + ' · ' + esc(p.platform) + ' · ' + esc(p.goal) + '</h3>' +
+      '<div style="margin-bottom:12px"><div style="font-size:13px;color:var(--text-tertiary);margin-bottom:6px">预算分配</div>' +
+      p.budget_allocation.map(a =>
+        '<div style="display:flex;justify-content:space-between;padding:8px 12px;border:1px solid var(--border-glass);border-radius:8px;margin-bottom:6px;background:rgba(124,111,240,0.05)">' +
+        '<span style="font-size:13px;color:var(--text-primary)">' + esc(a.stage) + '</span>' +
+        '<span style="font-size:13px;color:var(--accent);font-family:JetBrains Mono,monospace">¥' + a.budget + '（' + a.ratio + '%）</span></div>' +
+        '<div style="font-size:11px;color:var(--text-quaternary);margin-top:2px">' + esc(a.desc) + '</div>'
+      ).join('') + '</div>' +
+      '<div style="margin-bottom:12px"><div style="font-size:13px;color:var(--text-tertiary);margin-bottom:6px">受众定向 · 出价</div>' +
+      '<div style="font-size:13px;color:var(--text-secondary);margin-bottom:4px">出价策略：' + esc(p.bid_note) + '</div>' +
+      p.audience.map(a => '<span class="chip" style="margin:2px">' + esc(a) + '</span>').join('') + '</div>' +
+      '<div style="margin-bottom:12px"><div style="font-size:13px;color:var(--text-tertiary);margin-bottom:6px">素材规格</div>' +
+      '<div style="font-size:13px;color:var(--text-secondary)">' + esc(p.spec) + '</div></div>' +
+      '<div><div style="font-size:13px;color:var(--text-tertiary);margin-bottom:6px">A/B 测试计划</div>' +
+      p.ab_plan.map(a => '<div style="font-size:13px;color:var(--text-secondary);padding:4px 0">· ' + esc(a) + '</div>').join('') + '</div>' +
+      '<div class="note" style="margin-top:12px">' + esc(p.platform_note) + '</div>' +
+      '</div>';
+    st.innerHTML = '✓ 投放策略已生成';
+    btn.disabled = false;
+    track('adbuy_success', p.platform + '/' + p.goal);
+  } catch (e) { st.innerHTML = '网络错误'; btn.disabled = false; }
+}
+
+// 选品结果一键进入投放
+function goAdbuy(category) {
+  switchView('adbuy');
+  document.getElementById('ab-category').value = category;
+  showToast('已带入品类「' + category + '」，调整参数后生成投放策略');
 }
 
 // ===== I 导出素材包 =====

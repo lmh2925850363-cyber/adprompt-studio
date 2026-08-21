@@ -79,6 +79,14 @@ class SourcingRequest(BaseModel):
     platform: str = "tiktok"  # tiktok | amazon
 
 
+class AdbuyRequest(BaseModel):
+    """V3 投放规则：输入已选品类/预算/平台/目标 → 输出投放策略。"""
+    category: str = ""
+    budget: float = 5000.0
+    platform: str = "tiktok"  # tiktok | amazon
+    goal: str = "conversion"  # conversion(转化) | traffic(曝光) | testing(测款)
+
+
 def _log_db_event(event: str, payload: str = "", is_simulated: int = 0) -> None:
     """写事件到 SQLite（供 D7 模拟用户 + D8 SQL 分析）。"""
     conn = sqlite3.connect(DB_PATH)
@@ -436,6 +444,68 @@ def sourcing(req: SourcingRequest):
         "results": results,
         "note": "规则引擎评估（公开常识评级，非实时流量数据，结论方向性）",
     }
+
+
+@app.post("/api/adbuy")
+def adbuy(req: AdbuyRequest):
+    """
+    V3 投放规则（规则引擎，补全「选品→制作→投放」最后一环）：
+    输入已选品类/预算/平台/投放目标 → 输出预算分配、出价参考、受众定向、素材规格、A/B 计划。
+
+    设计说明（可拷打）：
+    - 预算分配：三阶段法（测试 → 放量 → 优化），测试期只花 20% 预算验证
+    - 出价参考：按目标类型给相对区间（不是绝对值，因平台实时竞价变化）
+    - 素材规格：平台官方规格常识（TikTok 竖屏 / Amazon 主图）
+    - A/B 计划：素材变量测试清单（开头钩子/卖点顺序/视觉风格）
+    - 全部为规则+常识，非实时竞价数据，诚实标注方向性
+    """
+    PLATFORM_RULES = {
+        "tiktok": {
+            "spec": "竖屏 9:16，建议 15-30 秒，前 3 秒必须有钩子",
+            "audience": ["18-35 岁为主", "兴趣标签定向（泛娱乐/生活方式）", "lookalike 受众（种子=已互动用户）"],
+            "note": "TikTok 是兴趣推荐逻辑，素材本身即定向——钩子决定冷启动",
+        },
+        "amazon": {
+            "spec": "主图视频 16:9，建议 30-60 秒，前 5 秒展示核心卖点",
+            "audience": ["搜索意图定向（关键词）", "竞品 ASIN 定向", "类目兴趣定向"],
+            "note": "Amazon 是搜索+货架逻辑，关键词和主图视频决定转化",
+        },
+    }
+    GOAL_RULES = {
+        "conversion": {"label": "转化（出单）", "bid_note": "中高出价，优先转化人群", "test_ratio": 0.2},
+        "traffic": {"label": "曝光（跑量）", "bid_note": "中低出价，追求覆盖", "test_ratio": 0.15},
+        "testing": {"label": "测款（验证）", "bid_note": "均匀出价，多素材并行测", "test_ratio": 0.3},
+    }
+
+    rules = PLATFORM_RULES.get(req.platform, PLATFORM_RULES["tiktok"])
+    goal = GOAL_RULES.get(req.goal, GOAL_RULES["conversion"])
+
+    budget = max(req.budget, 100.0)
+    test_budget = round(budget * goal["test_ratio"], 0)
+    scale_budget = round(budget - test_budget, 0)
+
+    plan = {
+        "category": req.category or "未指定",
+        "platform": req.platform,
+        "goal": goal["label"],
+        "budget_allocation": [
+            {"stage": "测试期（验证素材）", "budget": test_budget, "ratio": int(goal["test_ratio"] * 100),
+             "desc": f"先投 {test_budget} 元测 3-5 条素材，找最佳钩子/卖点组合"},
+            {"stage": "放量期（赢家放量）", "budget": scale_budget, "ratio": 100 - int(goal["test_ratio"] * 100),
+             "desc": f"把剩余 {scale_budget} 元集中投表现最好的素材，跑正 ROI 后持续加码"},
+        ],
+        "bid_note": goal["bid_note"],
+        "audience": rules["audience"],
+        "spec": rules["spec"],
+        "platform_note": rules["note"],
+        "ab_plan": [
+            "变量 1：开头钩子（痛点钩子 vs 好奇钩子）",
+            "变量 2：卖点顺序（价格优先 vs 功能优先）",
+            "变量 3：视觉风格（实拍 vs 3D 渲染 vs UGC）",
+        ],
+    }
+    _log_db_event("adbuy_plan", f"{req.platform}/{req.goal}")
+    return {"ok": True, "plan": plan, "note": "规则引擎投放策略（公开常识，非实时竞价数据，方向性）"}
 
 
 @app.get("/api/export/{item_id}")
