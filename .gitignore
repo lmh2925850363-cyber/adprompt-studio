@@ -1,0 +1,26 @@
+# ===== 密钥——绝不提交 =====
+.env
+*.key
+*.pem
+
+# ===== 数据与缓存（重文件/可再生成，不进 git）=====
+data/raw/
+data/knowledge/
+data/adprompt.db
+data/*.db
+*.npy
+__pycache__/
+*.pyc
+
+# ===== 环境 =====
+.venv/
+venv/
+node_modules/
+
+# ===== 操作系统 =====
+Thumbs.db
+.DS_Store
+
+# ===== 临时 =====
+*.log
+.tmp

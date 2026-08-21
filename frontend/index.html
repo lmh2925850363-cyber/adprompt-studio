@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AdPrompt Studio — 出海电商广告素材生成器</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ===== 设计系统：「深空紫 · 玻璃拟态」（2026 AI 产品美学）===== */
+:root {
+  --bg-deep: #0a0a12;
+  --bg-panel: #10101c;
+  --bg-surface: rgba(255,255,255,0.04);
+  --bg-surface2: rgba(255,255,255,0.07);
+  --text-primary: #f4f4ff;
+  --text-secondary: #c9c9e0;
+  --text-tertiary: #8f8fa8;
+  --text-quaternary: #5d5d75;
+  --brand-violet: #8b5cf6;
+  --brand-indigo: #6366f1;
+  --brand-cyan: #06b6d4;
+  --accent: #7c6ff0;
+  --accent-hover: #9d8fff;
+  --success: #10b981;
+  --emerald: #34d399;
+  --danger: #f43f5e;
+  --border-glass: rgba(255,255,255,0.08);
+  --border-glow: rgba(139,92,246,0.25);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --shadow-card: 0 8px 32px rgba(0,0,0,0.4);
+  font-feature-settings: "cv01", "ss03";
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+/* 背景光晕（深空紫氛围） */
+body::before {
+  content: "";
+  position: fixed; inset: 0; z-index: -2;
+  background:
+    radial-gradient(ellipse 60% 40% at 20% -10%, rgba(139,92,246,0.18), transparent 60%),
+    radial-gradient(ellipse 50% 35% at 85% 0%, rgba(6,182,212,0.10), transparent 60%),
+    radial-gradient(ellipse 55% 40% at 50% 110%, rgba(99,102,241,0.12), transparent 60%),
+    var(--bg-deep);
+}
+/* 细微噪点纹理 */
+body::after {
+  content: "";
+  position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0.35;
+  background-image: radial-gradient(rgba(255,255,255,0.025) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.mono { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+/* ===== 布局 ===== */
+.container { max-width: 1100px; margin: 0 auto; padding: 0 32px; }
+
+/* ===== 顶栏（毛玻璃）===== */
+header {
+  position: sticky; top: 0; z-index: 10;
+  background: rgba(10,10,18,0.7); backdrop-filter: blur(20px) saturate(140%);
+  border-bottom: 1px solid var(--border-glass);
+}
+.nav {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 0; max-width: 1100px; margin: 0 auto; padding-left: 32px; padding-right: 32px;
+}
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; letter-spacing: -0.2px; }
+.brand-logo {
+  width: 30px; height: 30px; border-radius: 9px;
+  background: linear-gradient(135deg, var(--brand-violet), var(--brand-indigo) 55%, var(--brand-cyan));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; color: #fff;
+  box-shadow: 0 0 20px rgba(139,92,246,0.4);
+}
+.nav-badge {
+  font-size: 11px; font-weight: 500; color: var(--text-tertiary);
+  border: 1px solid var(--border-glass); border-radius: 9999px;
+  padding: 4px 12px; letter-spacing: 0.2px;
+  background: rgba(255,255,255,0.03);
+}
+
+/* ===== Hero（渐变大标题）===== */
+.hero { padding: 80px 0 44px; text-align: center; }
+.hero h1 {
+  font-size: 52px; font-weight: 700; line-height: 1.05; letter-spacing: -1.2px;
+  color: var(--text-primary); margin-bottom: 18px;
+}
+.hero h1 .grad {
+  background: linear-gradient(120deg, var(--brand-violet) 0%, var(--brand-indigo) 45%, var(--brand-cyan) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.hero p {
+  font-size: 18px; font-weight: 400; color: var(--text-tertiary);
+  max-width: 580px; margin: 0 auto; letter-spacing: -0.2px; line-height: 1.7;
+}
+
+/* ===== 输入卡片（玻璃拟态）===== */
+.input-card {
+  background: var(--bg-surface);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-lg);
+  padding: 26px; margin: 36px 0;
+  box-shadow: var(--shadow-card), 0 0 0 1px rgba(139,92,246,0.05), inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-size: 12px; font-weight: 500; color: var(--text-secondary); letter-spacing: 0.2px; }
+.field input, .field select, .field textarea {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  padding: 12px 14px; font-size: 14px; font-family: inherit;
+  outline: none; transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+.field input:focus, .field select:focus, .field textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(124,111,240,0.15);
+  background: rgba(255,255,255,0.05);
+}
+.field input::placeholder, .field textarea::placeholder { color: var(--text-quaternary); }
+.field textarea { resize: vertical; min-height: 72px; }
+.field.full { grid-column: 1 / -1; }
+.field .hint { font-size: 11px; color: var(--text-quaternary); }
+
+.actions { display: flex; align-items: center; gap: 12px; margin-top: 22px; }
+.btn {
+  border: none; border-radius: 10px; padding: 12px 24px;
+  font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+  transition: transform 0.15s, box-shadow 0.2s, opacity 0.15s, background 0.2s;
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--brand-violet), var(--brand-indigo));
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(139,92,246,0.35);
+}
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(139,92,246,0.5); }
+.btn-primary:active { transform: translateY(0); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+.btn-ghost {
+  background: rgba(255,255,255,0.04); color: var(--text-secondary);
+  border: 1px solid var(--border-glass);
+}
+.btn-ghost:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+.status { font-size: 13px; color: var(--text-tertiary); }
+.status.error { color: var(--danger); }
+
+/* 可访问性：所有可点击元素显示手型 */
+.btn, .copy-btn, .fb-btn, .chip { cursor: pointer; }
+/* 键盘焦点可见 */
+.btn:focus-visible, .copy-btn:focus-visible, .fb-btn:focus-visible,
+.field input:focus-visible, .field select:focus-visible, .field textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* 尊重用户减少动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .spinner { animation: none; }
+}
+/* 复制成功反馈 toast */
+.toast {
+  position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%);
+  background: rgba(16,17,28,0.95); backdrop-filter: blur(12px);
+  border: 1px solid var(--border-glass); border-radius: var(--radius-md);
+  padding: 11px 20px; font-size: 13px; color: var(--text-primary);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5); z-index: 100;
+  opacity: 0; pointer-events: none; transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+
+/* ===== 结果区 ===== */
+.results { display: none; margin: 40px 0 80px; }
+.results.show { display: block; }
+.section-title {
+  font-size: 20px; font-weight: 590; color: var(--text-primary);
+  letter-spacing: -0.24px; margin: 32px 0 16px; display: flex; align-items: center; gap: 10px;
+}
+.section-title .step {
+  font-size: 11px; font-weight: 600; color: var(--accent);
+  border: 1px solid rgba(124,111,240,0.3); border-radius: 6px;
+  padding: 2px 7px; font-family: 'JetBrains Mono', monospace;
+  background: rgba(124,111,240,0.08);
+}
+
+/* 质检徽章（玻璃卡）*/
+.quality-bar {
+  display: flex; align-items: center; gap: 14px; padding: 18px 22px;
+  border-radius: var(--radius-md); margin-bottom: 10px;
+  backdrop-filter: blur(12px);
+}
+.quality-pass {
+  background: rgba(16,185,129,0.07);
+  border: 1px solid rgba(16,185,129,0.2);
+  box-shadow: 0 4px 24px rgba(16,185,129,0.08);
+}
+.quality-fail {
+  background: rgba(244,63,94,0.07);
+  border: 1px solid rgba(244,63,94,0.2);
+  box-shadow: 0 4px 24px rgba(244,63,94,0.08);
+}
+.quality-score { font-size: 30px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+.quality-label { font-size: 13px; color: var(--text-secondary); }
+.quality-pass .quality-score { color: var(--emerald); text-shadow: 0 0 20px rgba(52,211,153,0.4); }
+.quality-fail .quality-score { color: var(--danger); text-shadow: 0 0 20px rgba(244,63,94,0.4); }
+.q-dims { display: flex; gap: 20px; margin-left: auto; font-size: 12px; color: var(--text-tertiary); }
+.q-dims b { font-family: 'JetBrains Mono', monospace; color: var(--text-secondary); font-weight: 500; }
+
+/* 卖点 chips（渐变紫描边）*/
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  background: rgba(124,111,240,0.08); border: 1px solid rgba(124,111,240,0.2);
+  border-radius: 9999px; padding: 7px 15px; font-size: 13px; color: var(--text-secondary);
+  transition: background 0.2s, border-color 0.2s;
+}
+.chip:hover { background: rgba(124,111,240,0.14); border-color: rgba(124,111,240,0.35); }
+
+/* 卡片网格（玻璃拟态）*/
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.card {
+  background: var(--bg-surface);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+.card:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,0,0,0.35); border-color: var(--border-glow); }
+.card h3 { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px; }
+.card .body { font-size: 13px; color: var(--text-secondary); white-space: pre-wrap; line-height: 1.7; }
+.card .copy-btn {
+  margin-top: 12px; font-size: 12px; padding: 7px 14px;
+  background: rgba(124,111,240,0.1); border: 1px solid rgba(124,111,240,0.25);
+  border-radius: 8px; color: var(--text-secondary); cursor: pointer; font-family: inherit;
+  transition: background 0.2s, color 0.2s;
+}
+.card .copy-btn:hover { background: rgba(124,111,240,0.2); color: var(--text-primary); }
+
+/* 色板 */
+.palette { display: flex; gap: 10px; margin-top: 8px; }
+.swatch {
+  width: 64px; border-radius: var(--radius-sm); padding: 8px; text-align: center;
+  font-size: 10px; font-family: 'JetBrains Mono', monospace; color: #fff;
+  display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--border-glass);
+}
+
+/* 分镜表（玻璃容器）*/
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+  text-align: left; font-size: 11px; font-weight: 600; color: var(--text-quaternary);
+  text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 10px;
+  border-bottom: 1px solid var(--border-glass);
+}
+td { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--text-secondary); vertical-align: top; }
+tr:hover td { background: rgba(255,255,255,0.02); }
+td .shot-no { font-family: 'JetBrains Mono', monospace; color: var(--accent); font-weight: 600; }
+td .tag {
+  display: inline-block; font-size: 11px; color: var(--text-tertiary);
+  border: 1px solid var(--border-glass); border-radius: 6px; padding: 2px 7px; margin-right: 4px;
+  background: rgba(255,255,255,0.03);
+}
+
+/* 反馈按钮（玻璃）*/
+.feedback {
+  display: flex; align-items: center; gap: 12px; margin-top: 32px; padding: 20px 22px;
+  border: 1px solid var(--border-glass); border-radius: var(--radius-md);
+  background: var(--bg-surface); backdrop-filter: blur(12px);
+}
+
+/* 空态引导（发光虚线）*/
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  padding: 60px 24px;
+  border: 1.5px dashed rgba(124,111,240,0.25); border-radius: var(--radius-lg);
+  color: var(--text-tertiary);
+  background: rgba(124,111,240,0.03);
+}
+.empty-icon {
+  width: 54px; height: 54px; border-radius: 14px; margin-bottom: 16px;
+  background: linear-gradient(135deg, rgba(139,92,246,0.15), rgba(6,182,212,0.15));
+  border: 1px solid var(--border-glass);
+  display: flex; align-items: center; justify-content: center; color: var(--accent);
+  box-shadow: 0 0 30px rgba(139,92,246,0.15);
+}
+.empty-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px; letter-spacing: -0.24px; }
+.empty-desc { font-size: 13px; max-width: 420px; line-height: 1.7; }
+.feedback .fb-label { font-size: 13px; color: var(--text-secondary); }
+.fb-btn {
+  font-size: 20px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-glass);
+  border-radius: 10px; width: 46px; height: 46px; cursor: pointer; color: var(--text-secondary);
+  transition: transform 0.15s, background 0.2s, border-color 0.2s, color 0.2s;
+}
+.fb-btn:hover { transform: scale(1.08); background: rgba(255,255,255,0.08); color: var(--text-primary); }
+.fb-btn.selected { border-color: var(--accent); background: rgba(124,111,240,0.18); color: var(--accent-hover); }
+.fb-note { font-size: 12px; color: var(--text-tertiary); }
+
+/* Footer */
+footer {
+  border-top: 1px solid var(--border-glass); padding: 28px 0 44px;
+  text-align: center; font-size: 12px; color: var(--text-quaternary);
+}
+
+/* 加载动画（紫光）*/
+.spinner {
+  width: 16px; height: 16px; border: 2px solid rgba(124,111,240,0.2);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin 0.8s linear infinite; display: inline-block; vertical-align: middle; margin-right: 8px;
+  box-shadow: 0 0 12px rgba(124,111,240,0.3);
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 768px) {
+  .input-grid, .grid-2 { grid-template-columns: 1fr; }
+  .hero h1 { font-size: 34px; letter-spacing: -0.6px; }
+  .q-dims { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="nav">
+    <div class="brand">
+      <div class="brand-logo">A</div>
+      <span>AdPrompt Studio</span>
+    </div>
+    <span class="nav-badge">出海电商广告素材生成器</span>
+  </div>
+</header>
+
+<div class="container">
+  <!-- Hero -->
+  <div class="hero">
+    <h1>商品信息 → <span class="grad">完整广告素材包</span></h1>
+    <p>输入商品，一键生成卖点分析、广告文案、视觉方案、分镜脚本与三模型视频 prompt。质检自动把关，低分自动重写。</p>
+  </div>
+
+  <!-- 输入区 -->
+  <div class="input-card">
+    <div class="input-grid">
+      <div class="field">
+        <label>商品名称 *</label>
+        <input id="in-name" placeholder="如：YepCam X5 运动相机">
+      </div>
+      <div class="field">
+        <label>商品类目</label>
+        <select id="in-category">
+          <option>3C数码</option><option>美妆个护</option><option>运动户外</option>
+          <option>运动营养</option><option>厨房家电</option><option>宠物用品</option><option>其他</option>
+        </select>
+      </div>
+      <div class="field full">
+        <label>商品描述 *</label>
+        <textarea id="in-desc" placeholder="描述商品的核心卖点，越具体生成效果越好。如：4K 防水运动相机，裸机防水 10 米，带防抖技术，适合骑行、潜水拍摄，超长续航，磁吸快拆设计。"></textarea>
+        <span class="hint">AI 会自动从描述中提取 3-5 个核心卖点</span>
+      </div>
+      <div class="field">
+        <label>目标平台</label>
+        <select id="in-platform">
+          <option value="tiktok">TikTok Shop（竖屏短视频）</option>
+          <option value="amazon">Amazon（主图视频 + 五点描述）</option>
+        </select>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" id="btn-generate" onclick="generate()">生成广告素材包</button>
+      <span class="status" id="status"></span>
+    </div>
+  </div>
+
+  <!-- 结果区 -->
+  <div class="results" id="results">
+    <!-- 空态引导（checklist: empty states designed） -->
+    <div class="empty-state" id="empty-state">
+      <div class="empty-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      </div>
+      <div class="empty-title">你的素材包会出现在这里</div>
+      <div class="empty-desc">输入商品信息并点击「生成广告素材包」，系统将自动完成卖点分析、文案、视觉方案、分镜与三模型 prompt 的全流程。</div>
+    </div>
+    <!-- 质检 -->
+    <div class="quality-bar quality-pass" id="quality-bar">
+      <span class="quality-score" id="q-score">4.2</span>
+      <div>
+        <div class="quality-label" id="q-label">质检通过 · 可直接使用</div>
+        <div class="q-dims">
+          <span>风格 <b id="q-style">0</b>/5</span>
+          <span>可用性 <b id="q-usable">0</b>/5</span>
+          <span>耗时 <b id="q-elapsed">0</b>s</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 卖点 -->
+    <div class="section-title"><span class="step">01</span>卖点分析</div>
+    <div class="chips" id="points"></div>
+
+    <!-- 文案 + 视觉 -->
+    <div class="grid-2" style="margin-top:16px">
+      <div class="card">
+        <h3>广告文案</h3>
+        <div class="body" id="copy"></div>
+        <button class="copy-btn" onclick="copyText('copy')">复制文案</button>
+      </div>
+      <div class="card">
+        <h3>视觉方案</h3>
+        <div class="body" id="visual"></div>
+        <div class="palette" id="palette"></div>
+      </div>
+    </div>
+
+    <!-- 分镜 -->
+    <div class="section-title"><span class="step">02</span>分镜脚本（<span id="shot-count">0</span> 镜头）</div>
+    <div class="card" style="padding:6px 16px">
+      <table>
+        <thead><tr><th style="width:56px">#</th><th style="width:90px">景别</th><th style="width:90px">运镜</th><th>画面描述</th><th style="width:120px">文案</th><th style="width:60px">时长</th></tr></thead>
+        <tbody id="shots"></tbody>
+      </table>
+    </div>
+
+    <!-- 三模板 -->
+    <div class="section-title"><span class="step">03</span>三模型 Prompt（直接复制粘贴到对应工具）</div>
+    <div class="grid-2" id="templates"></div>
+
+    <!-- 反馈 -->
+    <div class="feedback">
+      <span class="fb-label">这个素材包对你有帮助吗？</span>
+      <button class="fb-btn" id="fb-good" onclick="feedback('good')" aria-label="有用" title="有用">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>
+      </button>
+      <button class="fb-btn" id="fb-bad" onclick="feedback('bad')" aria-label="没用" title="没用">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg>
+      </button>
+      <span class="fb-note" id="fb-note"></span>
+    </div>
+  </div>
+</div>
+
+<footer>AdPrompt Studio · 作品集项目 · 数据闭环：埋点 → SQL 漏斗/留存 → A/B 实验<br><span style="color:#8f8fa8;font-size:11px">v2.0-深空紫-20260820</span></footer>
+
+<!-- 复制成功提示 -->
+<div class="toast" id="toast">已复制到剪贴板</div>
+
+<script>
+let currentPayload = '';
+
+async function generate() {
+  const name = document.getElementById('in-name').value.trim();
+  const desc = document.getElementById('in-desc').value.trim();
+  if (!name || !desc) {
+    setStatus('请填写商品名称和描述', true);
+    return;
+  }
+  const btn = document.getElementById('btn-generate');
+  btn.disabled = true;
+  setStatus('<span class="spinner"></span>正在生成素材包（约 30-60 秒）...');
+
+  // 埋点：页面内生成点击
+  track('prompt_generate_click', name);
+
+  try {
+    const resp = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name, category: document.getElementById('in-category').value,
+        description: desc, platform: document.getElementById('in-platform').value
+      })
+    });
+    const data = await resp.json();
+    if (!data.ok) { setStatus('生成失败：' + (data.error || '未知错误'), true); btn.disabled = false; return; }
+    render(data);
+    setStatus('✓ 生成完成，耗时 ' + data.elapsed_s + 's');
+    btn.disabled = false;
+  } catch (e) {
+    setStatus('网络错误：' + e.message, true);
+    btn.disabled = false;
+  }
+}
+
+function track(event, productName) {
+  // 统一 payload 格式：user=<匿名ID>;product=<商品名>（与模拟数据同构，SQL 一套通吃）
+  const uid = getOrCreateUserId();
+  const full = 'user=' + uid + ';product=' + String(productName || '');
+  fetch('/api/event', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event, payload: full, is_simulated: 0 })
+  }).catch(() => {});
+}
+
+// 匿名用户标识：localStorage 生成一次，跨页面/跨会话保持（留存分析需要）
+function getOrCreateUserId() {
+  let uid = localStorage.getItem('adprompt_uid');
+  if (!uid) {
+    uid = 'real_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    localStorage.setItem('adprompt_uid', uid);
+  }
+  return uid;
+}
+
+function render(d) {
+  currentPayload = d.product.name;
+
+  // 质检
+  const q = d.quality;
+  document.getElementById('q-score').textContent = q.overall.toFixed(1);
+  document.getElementById('q-style').textContent = q.style_score;
+  document.getElementById('q-usable').textContent = q.usability_score;
+  document.getElementById('q-elapsed').textContent = d.elapsed_s;
+  const qbar = document.getElementById('quality-bar');
+  qbar.className = 'quality-bar ' + (q.pass ? 'quality-pass' : 'quality-fail');
+  document.getElementById('q-label').textContent = q.pass ? '质检通过 · 可直接使用' : '质检未过 · 建议重新生成';
+  if (q.suggestions && q.suggestions.length) {
+    document.getElementById('q-label').textContent += '（' + q.suggestions[0] + '）';
+  }
+  track(q.pass ? 'quality_pass' : 'quality_fail', currentPayload);
+
+  // 卖点
+  document.getElementById('points').innerHTML = d.selling_points.map(p =>
+    '<span class="chip">' + esc(p) + '</span>').join('');
+
+  // 文案
+  const c = d.copy;
+  let copyHtml = '';
+  if (c.hook) copyHtml += '【开头钩子】' + esc(c.hook) + '\n';
+  if (c.captions) copyHtml += '【场景文案】\n' + c.captions.map(x => '  · ' + esc(x)).join('\n');
+  if (Array.isArray(c)) copyHtml = c.map(x => '· ' + esc(x)).join('\n');
+  document.getElementById('copy').textContent = copyHtml;
+
+  // 视觉
+  const v = d.visual;
+  document.getElementById('visual').textContent =
+    '风格：' + (v.style || '') + '\n构图：' + (v.composition || '') + '\n情绪：' + (v.mood || '');
+  const pal = v.palette || [];
+  document.getElementById('palette').innerHTML = pal.map(p =>
+    '<div class="swatch" style="background:' + p.hex + '">' + esc(p.hex) + '<br>' + esc(p.usage || '') + '</div>').join('');
+
+  // 分镜
+  const shots = d.storyboard.shots || [];
+  document.getElementById('shot-count').textContent = shots.length;
+  document.getElementById('shots').innerHTML = shots.map(s =>
+    '<tr><td><span class="shot-no">' + s.shot_no + '</span></td>' +
+    '<td><span class="tag">' + esc(s.scene_type) + '</span></td>' +
+    '<td><span class="tag">' + esc(s.camera) + '</span></td>' +
+    '<td>' + esc(s.description) + '</td>' +
+    '<td>' + esc(s.copy) + '</td>' +
+    '<td class="mono">' + esc(s.duration) + '</td></tr>').join('');
+
+  // 三模板
+  const tpl = d.templates;
+  document.getElementById('templates').innerHTML = Object.entries(tpl).map(([key, info]) =>
+    '<div class="card"><h3>' + esc(info.label) + '</h3>' +
+    '<div class="body mono" id="tpl-' + key + '" style="font-size:12px">' + esc(info.prompt) + '</div>' +
+    '<button class="copy-btn" onclick="copyById(\'tpl-' + key + '\')">复制 Prompt</button></div>').join('');
+
+  document.getElementById('results').classList.add('show');
+  const es = document.getElementById('empty-state');
+  if (es) es.style.display = 'none';
+  document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+  track('prompt_generate_success', currentPayload);
+}
+
+function copyById(id) {
+  const el = document.getElementById(id);
+  const text = el.textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    track('prompt_copy', currentPayload);
+    showToast('Prompt 已复制 ✓');
+  }).catch(() => showToast('复制失败，请手动选择复制', true));
+}
+function copyText(id) {
+  const el = document.getElementById(id);
+  navigator.clipboard.writeText(el.textContent).then(() => {
+    track('prompt_copy', currentPayload);
+    showToast('文案已复制 ✓');
+  }).catch(() => showToast('复制失败，请手动选择复制', true));
+}
+let toastTimer = null;
+function showToast(msg, isError) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.borderColor = isError ? 'rgba(244,63,94,0.5)' : 'var(--border-glass)';
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+function feedback(kind) {
+  document.getElementById('fb-good').classList.toggle('selected', kind === 'good');
+  document.getElementById('fb-bad').classList.toggle('selected', kind === 'bad');
+  track('feedback_' + kind, currentPayload);
+  document.getElementById('fb-note').textContent = '已记录你的反馈（feedback_' + kind + '），感谢！';
+}
+
+function setStatus(msg, isError) {
+  const el = document.getElementById('status');
+  el.innerHTML = msg;
+  el.className = 'status' + (isError ? ' error' : '');
+}
+function esc(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// 页面访问埋点（无商品名，product 留空）
+track('page_view', '');
+</script>
+</body>
+</html>

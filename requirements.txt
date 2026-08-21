@@ -1,0 +1,16 @@
+# AdPrompt Studio 依赖（Python 3.13）
+# D1 数据管线
+pandas>=2.2
+pyarrow>=16.0        # 读 parquet
+requests>=2.31
+huggingface_hub>=0.24
+
+# D2 知识库（稍后安装）
+# chromadb>=0.5
+# sentence-transformers>=3.0   # bge-small-zh 本地 embedding
+
+# D3+ LLM 工作流（稍后安装）
+# openai>=1.30        # DeepSeek API 兼容 OpenAI 协议
+
+# D6 前端
+# streamlit>=1.36
